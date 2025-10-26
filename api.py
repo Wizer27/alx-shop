@@ -166,6 +166,7 @@ async def create_card(request:Create_Card):
                 ind = True
                 with open("shops.json","w") as file:
                     json.dump(data,file)
+                break    
         if not ind:
             raise HTTPException(status_code=404,detail = "Shop not found")
     except Exception as e:
@@ -187,8 +188,61 @@ async def delete_card(request:Delete_Card):
                         shop["cards"].pop(i)
                         with open("shops.json","w") as file:
                             json.dump(data,file)
+                        break    
         if not ind:
-            raise HTTPException(status_code=400,detail="Card not found")                    
-
+            raise HTTPException(status_code=400,detail="Card not found")                          
     except Exception as e:
         raise HTTPException(status_code=400,detail=f"Error : {e}")
+class GetShopCards(BaseModel):
+    shop_id:str
+    signature:str
+    timestamp:float = Field(defaul_factory = time.time)
+@app.post("/get_shop_cards")
+async def get_shop_cars(request:GetShopCards):
+    if not verify_signature(request.model_dump(),request.signature):
+        raise HTTPException(status_code = 429,detail = "Invalid signature") 
+    try:
+        with open("shops.json","r") as file:
+            data = json.load(file)
+        for shop in data:
+            if shop["id"] == request.shop_id:
+                return shop["cards"]
+        raise HTTPException(status_code=404,detail = "Not found")        
+    except Exception as e:
+        raise HTTPException(status_code=400,detail = f"Error : {e}")   
+
+
+class WriteTheFeedBack(BaseModel):
+    username:str
+    shop_id:str
+    card_id:str
+    stars:int
+    feed_back:str
+    signature:str
+    timestamp:float = Field(default_factory=time.time)
+@app.post("/feedback")
+async def feedback(request:WriteTheFeedBack):
+    if not verify_signature(request.model_dump(),request.signature):
+        raise HTTPException(status_code=429,detail="Invalid signature")
+    try:
+        ind = False
+        with open("shops.json","r") as file:
+            data = json.load(file)
+        for shop in data:
+            if shop["id"] == request.shop_id:
+                for card in shop["cards"]:
+                    if card["id"] == request.card_id:
+                        card["feedbacks"].append({
+                            "username":request.username,
+                            "stars":request.stars,
+                            "feedback":request.feed_back
+                        })
+                        with open("shops.json","w") as file:
+                            json.dump(data,file)
+                        ind = True
+                        break
+        if not ind:
+            raise HTTPException(status_code = 404,detail = "Not found")                
+    except Exception as e:
+        raise HTTPException(status_code=400,detail=f"Error : {e}")      
+      
