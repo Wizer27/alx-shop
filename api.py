@@ -1,0 +1,163 @@
+import json
+from fastapi import HTTPException,FastAPI
+from pydantic import BaseModel,Field
+import time
+import uuid
+import requests
+import hmac
+import uvicorn
+import hashlib
+
+
+
+ 
+
+
+def get_key() -> str:
+    with open("sec.json","r") as file:
+        sec = json.load(file)
+    return sec["key"]    
+
+
+def verify_signature(data: dict, received_signature: str) -> bool:
+    if time.time() - data.get('timestamp', 0) > 300:
+        return False
+    
+    
+    data_to_verify = data.copy()
+    data_to_verify.pop("signature", None)
+    
+    data_str = json.dumps(data_to_verify, sort_keys=True, separators=(',', ':'))
+    expected_signature = hmac.new(get_key().encode(), data_str.encode(), hashlib.sha256).hexdigest()
+    
+    return hmac.compare_digest(received_signature, expected_signature)
+
+
+app = FastAPI()
+
+@app.get("/")
+async def main():
+    return "API"
+
+class Register(BaseModel):
+    username:str
+    pasw:str
+    role:str
+    timestamp:float  = Field(default_factory=time.time)
+    siganture:str
+
+@app.post("/register")
+async def register(request:Register):
+    try:
+        if not verify_signature(request.signature):
+            raise HTTPException(status_code = 403,detail = "Invalid signature")
+        try:
+            with open("users.json","r") as file:
+                data = json.load(file)
+            data.append(
+                {
+                    "username":request.username,
+                    "role":request.role
+                }
+             )   
+            with open("users.json","w") as file:
+                json.dump(data,file)
+        except Exception as e:
+            raise HTTPException(status_code = 400,deatil = f"Error : {e}")
+            
+    except Exception as e:
+      raise HTTPException(status_code = 400,detail = f"Error : {e}")
+
+
+class Get_User_Role(BaseModel):
+    username:str
+@app.post("/get/user/role")
+async def get_user_role(request:Get_User_Role):
+    try:
+        with open("users.json") as file:
+            data = json.load(file)
+        found  = False    
+        for user in data:
+            if user["username"] == request.username:
+                found = True
+                return user["role"]
+        if not found:
+            raise HTTPException(status_code = 404,detail = "Error user not found")
+    except Exception as e:
+        raise HTTPException(status_code = 400,detail = f"Error : {e}")
+
+
+class Create_Shop(BaseModel):
+    username:str
+    title:str
+    profile_photo:str
+    signature:str
+    description:str
+    timestamp:float = Field(default_factory = time.time)
+
+@app.post("/create_shop")
+async def cerate_shop(request:Create_Shop):
+    try:
+        id = uuid.uuid4()
+        with open("shops.json","r") as file:
+            data = json.load(file)
+        data.append({
+            "username":request.username,
+            "title":request.titile,
+            "profile_photo":request.profile_photo,
+            "description":request.description,
+            "id":id,
+            "cards":[]
+        })
+        with open("shops.json","w") as file:
+            json.dump(data,file)
+    except Exception as e:
+        raise HTTPException(status_code = 400,detail = f"Error : {e}")
+
+class Get_My_Shops(BaseModel):
+    username:str
+    signature:str
+    timestamp:float = Field(default_factory = time.time)
+@app.post("/user/get/shops")
+async def get_my_shops(request:Get_My_Shops):
+    if not verify_signature(request.model_dump(),request.siganture):
+        raise HTTPException(status_code = 429,detail = "Invalid signature")
+    try:
+        my_shops = []
+        with open("shops.json","r") as file:
+            data = json.load(file)
+        for shop in data:
+            if shop["username"] == request.username:
+                my_shops.append(shop)
+        if len(my_shops == 0):
+            raise HTTPException(status_code = 404,detail = "No shops")
+        return my_shops
+    except Exception as e:
+        raise HTTPException(status_code = 400,detail = f"Error : {e}")
+
+class Create_Card(BaseModel):
+    username:str
+    title:str
+    description:str
+    photos:str
+    price:int
+    fd_back:list
+    shop_id:str
+    signature:str
+    timestamp:float = Field(default_factory=time.time)
+@app.post("/create_card")
+async def create_card(request:Create_Card):
+    if not verify_signature(request.model_dump(),request.signature):
+        raise HTTPException(status_code = 429,detail = "Invalid signature")
+    try:
+        with open("shops.json","r") as file:
+            data = json.load(file)
+        for shop in data:
+            if shop["id"] == request.shop_id and shop["username"] == request.username:
+                shop["cards"].append({
+                    "title":request.title,
+                    "description":request.description
+                })
+
+    except Exception as e:
+        raise HTTPException(status_code=400,detail = f"Error : {e}")    
