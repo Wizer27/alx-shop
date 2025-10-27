@@ -32,6 +32,20 @@ def verify_signature(data: dict, received_signature: str) -> bool:
     
     return hmac.compare_digest(received_signature, expected_signature)
 
+def default_basket(username:str):
+    try:
+        with open("basket.json","r") as file:
+            data = json.load(file)
+        data.append({
+            "username":username,
+            "basket":[]
+        })
+        with open("basket.json","w") as file:
+            json.dump(data,file)
+
+    except Exception as e:
+        print(f"Error : {e}")
+
 
 app = FastAPI()
 
@@ -54,6 +68,8 @@ async def register(request:Register):
         try:
             with open("users.json","r") as file:
                 data = json.load(file)
+            if data.get(request.username):
+                raise HTTPException(status_code=400,detail = "This username is already taken")    
             data.append(
                 {
                     "username":request.username,
@@ -63,6 +79,7 @@ async def register(request:Register):
              )   
             with open("users.json","w") as file:
                 json.dump(data,file)
+            default_basket(request.username)    
         except Exception as e:
             raise HTTPException(status_code = 400,deatil = f"Error : {e}")
             
@@ -244,5 +261,9 @@ async def feedback(request:WriteTheFeedBack):
         if not ind:
             raise HTTPException(status_code = 404,detail = "Not found")                
     except Exception as e:
-        raise HTTPException(status_code=400,detail=f"Error : {e}")      
-      
+        raise HTTPException(status_code=400,detail=f"Error : {e}")  
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app,host = "0.0.0.0",port = 8080)
