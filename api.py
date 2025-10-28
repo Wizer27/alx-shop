@@ -262,7 +262,40 @@ async def feedback(request:WriteTheFeedBack):
             raise HTTPException(status_code = 404,detail = "Not found")                
     except Exception as e:
         raise HTTPException(status_code=400,detail=f"Error : {e}")  
+class AddProductToBasket(BaseModel):
+    username:str
+    shop_id:str
+    card_id:str
+    signature:str
+    timestamp:float = Field(default_factory=time.time)
+@app.post("/add/to/busket")
+async def add_to_busket(request:AddProductToBasket):
+    try:
+        new_item = None
+        with open("shops.json","r") as file:
+            data = json.load(file)
 
+        for shop in data:
+            if shop["id"] == request.shop_id:
+                for card in shop["cards"]:
+                    if card["id"] == request.card_id:
+                        new_item = card
+                        break
+        if new_item is not None:
+            with open("basket.json","r") as file:
+                bs = json.load(file)        
+            for user in bs:
+                if user["username"] == request.username:
+                    user["basket"].append(new_item)
+                    break
+        else:
+            raise HTTPException(status_code = 404,detail = "Shop or card not found")
+        
+
+
+
+    except Exception as e:
+        raise HTTPException(status_code = 400,detail = f"Error : {e}")        
 
 
 if __name__ == "__main__":
